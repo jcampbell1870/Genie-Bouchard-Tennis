@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../src/GenieBouchardTennis/Game.cs" Link="Game.cs" />
+    <Compile Include="../../src/GenieBouchardTennis/Rewards.cs" Link="Rewards.cs" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <Content Include="../../src/GenieBouchardTennis/wallet.html;../../src/GenieBouchardTennis/wallet.js;../../src/GenieBouchardTennis/wallet.css"
+             Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Nethereum.ABI" Version="4.21.0" />
+  </ItemGroup>
+
+</Project>

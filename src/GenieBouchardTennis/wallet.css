@@ -1,0 +1,4 @@
+body { background: #102b32; color: #fff2c6; font: 18px monospace; max-width: 760px; margin: 50px auto; padding: 20px; }
+button { padding: 14px; margin: 8px 0; font: inherit; cursor: pointer; }
+code { overflow-wrap: anywhere; }
+#status { white-space: pre-wrap; border: 2px solid #72ddac; padding: 20px; }

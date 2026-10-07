@@ -1,0 +1,43 @@
+name: Build and deploy game downloads
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Publish Windows game
+        run: dotnet publish src/GenieBouchardTennis/GenieBouchardTennis.csproj -c Release -r win-x64 --self-contained true -o artifacts/windows
+      - name: Assemble downloads and Pages site
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force docs/downloads, artifacts/chromebook | Out-Null
+          Compress-Archive -Path artifacts/windows/* -DestinationPath docs/downloads/GenieBouchardTennis-Windows-x64.zip -Force
+          Copy-Item docs/index.html, docs/style.css, docs/game.js, docs/manifest.webmanifest, docs/service-worker.js artifacts/chromebook/
+          Compress-Archive -Path artifacts/chromebook/* -DestinationPath docs/downloads/GenieBouchardTennis-Chromebook.zip -Force
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

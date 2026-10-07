@@ -4,6 +4,12 @@ An original 2D Windows arcade tennis game with a low-resolution court, pixel pla
 
 No Nintendo code, sprites, music, logos, or other game assets are used. This is an unofficial fan project, not an endorsement by Eugenie Bouchard or Nintendo. Obtain any necessary name/likeness permissions before commercial distribution.
 
+## Downloads and Chromebook
+
+The project website is [Genie Bouchard Tennis](https://jcampbell1870.github.io/Genie-Bouchard-Tennis/). GitHub Actions builds the self-contained Windows x64 ZIP and the offline Chromebook/browser ZIP, then publishes both with the site. The Chromebook build is a browser edition: extract its ZIP and open `index.html` in Chrome, or install the website as a Chrome app after opening it online. The browser edition supports keyboard play but does not include the desktop wallet/reward integration.
+
+The Pages workflow runs on pushes to `main` and can also be started manually. GitHub Pages must be enabled with GitHub Actions as the deployment source for the site to go live.
+
 ## Play on Windows
 
 Install the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0), then run these commands from the repository root in PowerShell:

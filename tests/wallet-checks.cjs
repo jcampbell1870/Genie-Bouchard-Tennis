@@ -25,9 +25,21 @@ function page(options = {}) {
       if (method === "eth_requestAccounts") return [recipient];
       if (method === "eth_accounts") return [options.account || recipient];
       if (method === "eth_chainId") return options.chain || "0x1";
+      if (method === "eth_getCode") return options.noCode ? "0x" : "0x60016000";
       if (method === "eth_estimateGas") return "0x186a0";
       if (method === "eth_sendTransaction") return "0x" + "1".repeat(64);
-      if (method === "eth_getTransactionReceipt") return options.pending ? null : { status: options.reverted ? "0x0" : "0x1" };
+      if (method === "eth_getTransactionReceipt") return options.pending ? null : {
+        status: options.reverted ? "0x0" : "0x1", to: prepared.claim.vaultAddress,
+        logs: options.noTransfer ? [] : [{
+          address: prepared.tokenAddress,
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "0x" + prepared.claim.vaultAddress.slice(2).padStart(64, "0"),
+            "0x" + (options.wrongRecipient ? "b".repeat(40) : recipient.slice(2)).padStart(64, "0")
+          ],
+          data: "0x" + BigInt(options.wrongAmount ? "1" : prepared.claim.amount).toString(16).padStart(64, "0")
+        }]
+      };
       return "0x";
     }
   };
@@ -70,7 +82,7 @@ test("Simulation failure or wallet rejection does not confirm payment", async ()
     await ui.connect.click();
     await ui.send.click();
     assert.match(ui.status.textContent, /No confirmed reward/);
-    assert.doesNotMatch(ui.status.textContent, /Vault claim confirmed/);
+    assert.doesNotMatch(ui.status.textContent, /transfer confirmed/);
   }
 });
 test("Successful receipt confirms only after a simulated, zero-value vault claim", async () => {
@@ -83,7 +95,7 @@ test("Successful receipt confirms only after a simulated, zero-value vault claim
   assert.equal(tx.from, recipient);
   assert.ok(ui.calls.findIndex(c => c.method === "eth_call") <
             ui.calls.findIndex(c => c.method === "eth_sendTransaction"));
-  assert.match(ui.status.textContent, /Vault claim confirmed/);
+  assert.match(ui.status.textContent, /10 A1870 transfer confirmed/);
   assert.equal(ui.send.disabled, true);
   assert.equal(ui.connect.disabled, true);
 });
@@ -92,8 +104,22 @@ test("Reverted or pending transactions stay unconfirmed and cannot be resubmitte
     const ui = page(options);
     await ui.connect.click();
     await ui.send.click();
-    assert.doesNotMatch(ui.status.textContent, /Vault claim confirmed/);
+    assert.doesNotMatch(ui.status.textContent, /transfer confirmed/);
     assert.equal(ui.send.disabled, true);
     assert.equal(ui.connect.disabled, true);
+  }
+});
+test("Undeployed vault blocks submission; missing or incorrect transfers block reward confirmation", async () => {
+  for (const options of [{ noCode: true }, { noTransfer: true }, { wrongRecipient: true }, { wrongAmount: true }]) {
+    const ui = page(options);
+    await ui.connect.click();
+    await ui.send.click();
+    assert.doesNotMatch(ui.status.textContent, /transfer confirmed/);
+    if (options.noCode) assert.equal(ui.calls.some(c => c.method === "eth_sendTransaction"), false);
+    else {
+      assert.equal(ui.send.disabled, true);
+      assert.equal(ui.connect.disabled, true);
+      assert.match(ui.status.textContent, /expected A1870 transfer was not found/);
+    }
   }
 });

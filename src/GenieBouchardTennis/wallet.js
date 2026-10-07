@@ -6,6 +6,7 @@ let prepared = null;
 let submitted = false;
 const vault = "0x1e4f6e4a382adbdb662733a19ae773d3ab8f497d";
 const token = "0x8eddd4edea39c5b5f77662453600f53a202ee47c";
+const transferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 function report(message) { status.textContent = message; }
 function wallet() {
   if (!window.ethereum) throw new Error("Open this URL in a browser with an Ethereum wallet extension.");
@@ -49,6 +50,9 @@ send.addEventListener("click", async () => {
     await assertAccount();
     if (prepared.claim.deadline <= Math.floor(Date.now() / 1000))
       throw new Error("The claim expired. Ask the issuer operator for help; do not request another payout for this set.");
+    const code = await wallet().request({ method: "eth_getCode", params: [vault, "latest"] });
+    if (typeof code !== "string" || !/^0x(?:[0-9a-f]{2})+$/i.test(code) || /^0x0+$/i.test(code))
+      throw new Error("No deployed reward vault was found on mainnet. Nothing will be submitted.");
     const tx = { from: prepared.recipient, to: vault, data: prepared.data, value: "0x0" };
     // The vault checks the issuer signature and nonce before the wallet prompts for spending gas.
     await wallet().request({ method: "eth_call", params: [tx, "latest"] });
@@ -63,7 +67,15 @@ send.addEventListener("click", async () => {
       const receipt = await wallet().request({ method: "eth_getTransactionReceipt", params: [hash] });
       if (!receipt) continue;
       if (BigInt(receipt.status) !== 1n) throw new Error("Transaction reverted. No reward was confirmed; gas may have been spent.");
-      report("Vault claim confirmed: " + hash + "\nCheck your A1870 balance in the wallet. Never approve a second transaction for this set.");
+      const fromTopic = "0x" + vault.slice(2).padStart(64, "0");
+      const toTopic = "0x" + prepared.recipient.slice(2).toLowerCase().padStart(64, "0");
+      const paid = receipt.to?.toLowerCase() === vault && Array.isArray(receipt.logs) &&
+        receipt.logs.some(log => log.address?.toLowerCase() === token && log.topics?.length === 3 &&
+          log.topics[0]?.toLowerCase() === transferTopic &&
+          log.topics[1]?.toLowerCase() === fromTopic && log.topics[2]?.toLowerCase() === toTopic &&
+          /^0x[0-9a-f]{64}$/i.test(log.data) && BigInt(log.data) === BigInt(prepared.claim.amount));
+      if (!paid) throw new Error("Transaction succeeded but the expected A1870 transfer was not found. No reward was confirmed.");
+      report("10 A1870 transfer confirmed: " + hash + "\nCheck your A1870 balance in the wallet. Never approve a second transaction for this set.");
       return;
     }
     report("Still pending. Check this transaction in your wallet; do not submit again.");

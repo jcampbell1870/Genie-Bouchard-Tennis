@@ -12,12 +12,56 @@
 <body>
   <main>
     <header>
-      <p class="eyebrow">A pixel-court arcade game</p>
+      <p class="eyebrow">Centre court · Arcade tennis club</p>
       <h1>Genie Bouchard Tennis</h1>
-      <p>Take the court as Genie and challenge three computer opponents.</p>
+      <p>Classic tennis characters. A new competitive stage. Play solo, face a friend, or enter an eight-player knockout.</p>
     </header>
 
+    <section class="lobby" aria-labelledby="lobby-title">
+      <div class="lobby-heading">
+        <div><p class="eyebrow">The clubhouse</p><h2 id="lobby-title">Online lobby</h2></div>
+        <span id="connection-badge" class="badge">OFFLINE PRACTICE</span>
+      </div>
+      <p class="lobby-note">Free play · Equal player stats · No buy-ins or cash prizes</p>
+      <form id="connect-form" class="connect-form">
+        <label>Player name <input id="player-name" maxlength="24" required placeholder="Your court name" autocomplete="nickname"></label>
+        <label class="server-field">Multiplayer server <input id="server-url" type="url" required placeholder="https://your-tennis-server.example" aria-describedby="server-help"></label>
+        <button id="connect" type="submit">Connect</button>
+        <button id="disconnect" type="button" hidden>Disconnect</button>
+      </form>
+      <p id="server-help" class="lobby-note">Online play needs a running tennis server. GitHub Pages hosts practice only until you connect to a deployed server.</p>
+      <p id="lobby-status" role="status" aria-live="polite">Practice is ready. Connect to browse live matches.</p>
+      <div id="lobby-content" hidden>
+        <div class="lobby-actions">
+          <div class="mode-tabs" role="group" aria-label="Room filter">
+            <button type="button" data-filter="all" aria-pressed="true">All courts</button>
+            <button type="button" data-filter="duel" aria-pressed="false">1 vs 1</button>
+            <button type="button" data-filter="tournament" aria-pressed="false">Tournaments</button>
+          </div>
+          <form id="create-form" class="create-form">
+            <label class="sr-only" for="room-name">Room name</label>
+            <input id="room-name" maxlength="40" required placeholder="Name your court">
+            <label class="sr-only" for="room-mode">Match format</label>
+            <select id="room-mode"><option value="duel">1 vs 1 · 2 seats</option><option value="tournament">Knockout · 8 seats</option></select>
+            <button id="create-room" type="submit">Create room</button>
+          </form>
+        </div>
+        <div class="room-table-wrap">
+          <table class="room-table"><thead><tr><th>Court / event</th><th>Format</th><th>Seats</th><th>Status</th><th><span class="sr-only">Join</span></th></tr></thead>
+            <tbody id="room-list"></tbody>
+          </table>
+        </div>
+        <section id="active-room" hidden aria-labelledby="active-room-title">
+          <div class="lobby-heading"><h3 id="active-room-title"></h3><button id="leave-room" type="button">Leave room</button></div>
+          <p id="room-status"></p>
+          <ol id="roster" class="roster"></ol>
+          <div id="bracket" class="bracket" aria-label="Tournament bracket"></div>
+        </section>
+      </div>
+    </section>
+
     <section class="game" aria-label="Play the game">
+      <div class="court-heading"><h2 id="match-title">Practice court</h2><span id="match-badge" class="badge">SOLO · ONE SET</span></div>
       <div class="toolbar">
         <label for="opponent">Opponent</label>
         <select id="opponent">
@@ -27,9 +71,17 @@
         </select>
         <button id="new-game" type="button">New set</button>
         <button id="pause" type="button">Pause</button>
+        <label for="surface">Court</label>
+        <select id="surface"><option value="hard">Hard</option><option value="grass">Grass</option><option value="clay">Clay</option></select>
+        <button id="fullscreen" type="button">Full screen</button>
       </div>
       <canvas id="court" width="480" height="360" tabindex="0" aria-label="Tennis game. Use arrow keys or WASD to move, Space to serve or hit, and P to pause."></canvas>
       <p class="controls">Move: arrows / WASD &nbsp; · &nbsp; Serve or hit: Space &nbsp; · &nbsp; Pause: P &nbsp; · &nbsp; New set: N</p>
+      <p id="online-controls" class="controls" hidden>Online matches cannot pause. You control the highlighted player; the upper player moves in screen coordinates. Release Space between swings.</p>
+      <div class="touch-controls" aria-label="Touch game controls">
+        <div class="direction-pad"><button type="button" data-key="ArrowUp" aria-label="Move up">↑</button><button type="button" data-key="ArrowLeft" aria-label="Move left">←</button><button type="button" data-key="ArrowDown" aria-label="Move down">↓</button><button type="button" data-key="ArrowRight" aria-label="Move right">→</button></div>
+        <button type="button" data-key=" " class="swing-button">Serve / hit</button>
+      </div>
     </section>
 
     <section class="downloads" aria-labelledby="download-title">
@@ -51,6 +103,7 @@
     <footer>Unofficial fan project. Not endorsed by Eugenie Bouchard or Nintendo.</footer>
   </main>
   <script src="./game.js"></script>
+  <script src="./lobby.js"></script>
   <script>
     if ("serviceWorker" in navigator && location.protocol !== "file:") {
       navigator.serviceWorker.register("./service-worker.js");

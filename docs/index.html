@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0c1d2d">
+  <meta name="description" content="Play Genie Bouchard Tennis on Windows or Chromebook.">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./style.css">
+  <title>Genie Bouchard Tennis</title>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">A pixel-court arcade game</p>
+      <h1>Genie Bouchard Tennis</h1>
+      <p>Take the court as Genie and challenge three computer opponents.</p>
+    </header>
+
+    <section class="game" aria-label="Play the game">
+      <div class="toolbar">
+        <label for="opponent">Opponent</label>
+        <select id="opponent">
+          <option>Rookie</option>
+          <option>Club Champion</option>
+          <option>Tour Challenger</option>
+        </select>
+        <button id="new-game" type="button">New set</button>
+        <button id="pause" type="button">Pause</button>
+      </div>
+      <canvas id="court" width="480" height="360" tabindex="0" aria-label="Tennis game. Use arrow keys or WASD to move, Space to serve or hit, and P to pause."></canvas>
+      <p class="controls">Move: arrows / WASD &nbsp; · &nbsp; Serve or hit: Space &nbsp; · &nbsp; Pause: P &nbsp; · &nbsp; New set: N</p>
+    </section>
+
+    <section class="downloads" aria-labelledby="download-title">
+      <h2 id="download-title">Choose your version</h2>
+      <div class="download-cards">
+        <article>
+          <h3>Windows PC</h3>
+          <p>Self-contained 64-bit desktop game. Extract the ZIP and run <code>GenieBouchardTennis.exe</code>.</p>
+          <a class="button" href="./downloads/GenieBouchardTennis-Windows-x64.zip">Download for Windows</a>
+        </article>
+        <article>
+          <h3>Chromebook</h3>
+          <p>Offline browser game. Extract the ZIP, open <code>index.html</code> in Chrome, or play here on this page.</p>
+          <a class="button secondary" href="./downloads/GenieBouchardTennis-Chromebook.zip">Download for Chromebook</a>
+        </article>
+      </div>
+      <p class="install-note">On a Chromebook, you can also install this page as an app from Chrome's install icon or menu after opening it online once.</p>
+    </section>
+    <footer>Unofficial fan project. Not endorsed by Eugenie Bouchard or Nintendo.</footer>
+  </main>
+  <script src="./game.js"></script>
+  <script>
+    if ("serviceWorker" in navigator && location.protocol !== "file:") {
+      navigator.serviceWorker.register("./service-worker.js");
+    }
+  </script>
+</body>
+</html>

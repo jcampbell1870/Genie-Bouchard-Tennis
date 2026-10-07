@@ -12,7 +12,7 @@ function element() {
     addEventListener(name, callback) { this.listeners[name] = callback; },
     append(child) { this.children.push(child); },
     replaceChildren() { this.children = []; },
-    setAttribute() {}, setPointerCapture() {}
+    setAttribute() {}, setPointerCapture() {}, focus() {}
   };
 }
 function browser() {
@@ -98,6 +98,11 @@ async function lobby(options = {}) {
     id: "court", name: "<img onerror=alert(1)>", mode: "duel", status: "waiting",
     players: [{ id: "player", name: "<script>name</script>" }], capacity: 2, bracket: [], match: null, champion: null
   };
+  if (options.completed) {
+    room.status = "complete";
+    room.match = { id: "match", seat: 0, players: [{ name: "Player One" }, { name: "Player Two" }], state: { ...snapshot(), winner: 0, games: [6, 2] } };
+    room.champion = { id: "player", name: "Player One" };
+  }
   const context = {
     ...ui.context, URL, AbortSignal,
     location: { protocol: "http:", hostname: "localhost", origin: "http://localhost:8080" },
@@ -151,6 +156,20 @@ test("Unsafe server URLs and failed connections do not enter an online session",
   assert.equal(ui.$("#lobby-content").hidden, true);
   assert.equal(ui.$("#pause").disabled, false);
   assert.equal(ui.$("#lobby-status").textContent, "Unavailable");
+});
+
+test("Completed matches display the champion and final score without posting further inputs", async () => {
+  const ui = await lobby({ completed: true });
+  await ui.submit("#connect-form");
+  ui.$("#room-name").value = "Court"; ui.$("#room-mode").value = "duel";
+  await ui.submit("#create-form");
+  ui.window.listeners.keydown(ui.key(" "));
+  await ui.tick();
+  assert.equal(ui.calls.some(call => call.url.endsWith("/input")), false);
+  assert.equal(ui.$("#room-status").textContent, "Player One is the champion!");
+  assert.match(ui.$("#match-badge").textContent, /^FINAL/);
+  ui.frame(100);
+  assert.ok(ui.draw.some(text => text.includes("PLAYER ONE  6")));
 });
 
 test("Service worker never caches live API responses or third-party requests", () => {

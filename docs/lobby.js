@@ -79,7 +79,7 @@
       cell(row, room.name);
       cell(row, room.mode === "tournament" ? "8-player knockout" : "Heads-up");
       cell(row, `${room.players.length} / ${room.capacity}`);
-      cell(row, room.status === "waiting" ? "Registering" : room.status === "complete" ? "Complete" : "In play");
+      cell(row, room.status === "waiting" ? "Registering" : ["complete", "finished"].includes(room.status) ? "Complete" : "In play");
       const button = document.createElement("button");
       button.type = "button"; button.textContent = "Join";
       button.disabled = busy || Boolean(roomId) || room.status !== "waiting" || room.players.length >= room.capacity;
@@ -100,8 +100,10 @@
     window.TennisClient.setMatch(room.match);
     $("#active-room").hidden = false;
     $("#active-room-title").textContent = room.name;
+    const completed = room.match && room.match.state.winner >= 0;
     $("#room-status").textContent = room.champion ? `${room.champion.name} is the champion!`
       : room.status === "waiting" ? `${room.players.length} of ${room.capacity} seats filled. Play starts automatically when full.`
+      : completed ? `${room.match.players[room.match.state.winner].name} won your match. Follow the bracket for the next round.`
       : room.match ? `Live match · You control ${room.match.seat === 0 ? "the lower" : "the upper"} player.`
       : "Your match has ended. Follow the bracket for the next round or final result.";
     const markup = JSON.stringify([room.players, room.bracket, room.champion]);
@@ -227,7 +229,7 @@
     if (input.swing && !lastSwing) swingQueued = true;
     if (!input.swing && lastSwing) swingReleased = true;
     lastSwing = input.swing;
-    if (!connection || !roomId || !currentMatch || inputPending || busy) return;
+    if (!connection || !roomId || !currentMatch || currentMatch.state.winner >= 0 || inputPending || busy) return;
     const epoch = generation;
     inputPending = true;
     const sendSwing = swingQueued || (input.swing && !swingReleased);

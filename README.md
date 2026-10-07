@@ -34,6 +34,14 @@ Open `http://localhost:8080` in two browsers (or eight for a tournament). The se
 
 For public play, deploy the server behind an HTTPS reverse proxy and configure its allowed browser origins to include your site. Players on the GitHub Pages site enter that deployed **HTTPS server URL** in the lobby. Opening the downloaded game directly from `file://` is intended for offline practice; use the hosted site for multiplayer.
 
+Set `ALLOWED_ORIGINS` to a comma-separated list of exact browser origins, without paths or trailing slashes. Include the server's public origin if you also serve the game there. For example:
+
+```sh
+ALLOWED_ORIGINS=https://jcampbell1870.github.io,https://tennis.example.com node server/server.cjs
+```
+
+The defaults allow `http://localhost:8080` and `http://localhost:8000` for local development. `PORT` defaults to `8080`; `HOST` defaults to `0.0.0.0` (all network interfaces). For local-only use, set `HOST=127.0.0.1`. Disconnected entrants forfeit after 30 seconds without room polling; inactive players forfeit after two minutes without movement or swings.
+
 The server owns physics, scoring, tournament advancement, and forfeits; clients send movement and swing inputs only. Rooms and sessions are in memory and disappear on restart. This is a single-process, free-play service, not a production ranked/reward backend. Use TLS, proxy-level rate limits, and operator monitoring before exposing it publicly. It does not authorize or issue A1870 rewards.
 
 ## Play on Windows

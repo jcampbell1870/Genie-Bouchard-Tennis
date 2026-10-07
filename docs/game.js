@@ -21,6 +21,9 @@
   let swingUntil = 0;
   let lastPositions = [315, 300, 165, 82];
   let motion = [false, false];
+  const motionUntil = [0, 0];
+  const renderKeys = ["playerX", "playerY", "opponentX", "opponentY", "ballX", "ballY"];
+  let interpolation = null;
   const trail = [];
   const surfaces = {
     hard: { surround: "#365868", base: "#247ca0", stripe: "#287f9f" },
@@ -279,9 +282,17 @@
   function frame(now) {
     animationTime = now / 1000;
     update((now - previous) / 1000);
+    if (online && interpolation) {
+      const fraction = Math.min(1, (animationTime - interpolation.started) / 0.1);
+      for (const key of renderKeys)
+        game[key] = interpolation.from[key] + (interpolation.to[key] - interpolation.from[key]) * fraction;
+    }
     const positions = [game.playerX, game.playerY, game.opponentX, game.opponentY];
-    motion = [Math.hypot(positions[0] - lastPositions[0], positions[1] - lastPositions[1]) > 0.1,
-      Math.hypot(positions[2] - lastPositions[2], positions[3] - lastPositions[3]) > 0.1];
+    for (let seat = 0; seat < 2; seat++) {
+      if (Math.hypot(positions[seat * 2] - lastPositions[seat * 2], positions[seat * 2 + 1] - lastPositions[seat * 2 + 1]) > 0.1)
+        motionUntil[seat] = animationTime + 0.12;
+    }
+    motion = motionUntil.map(until => until > animationTime);
     lastPositions = positions;
     if (!game.waiting && !game.paused && (!online || onlineMatch)) {
       trail.push({ x: game.ballX, y: game.ballY });
@@ -311,11 +322,12 @@
     if (!online) { game.paused = true; pauseButton.textContent = "Resume"; }
   });
   document.addEventListener("visibilitychange", () => { if (document.hidden) keys.clear(); });
-  document.querySelector("#new-game").addEventListener("click", newGame);
+  document.querySelector("#new-game").addEventListener("click", () => { newGame(); canvas.focus(); });
   pauseButton.addEventListener("click", () => {
     if (online) return;
     game.paused = !game.paused;
     pauseButton.textContent = game.paused ? "Resume" : "Pause";
+    canvas.focus();
   });
   opponentSelect.addEventListener("change", newGame);
   document.querySelector("#fullscreen").addEventListener("click", async () => {
@@ -341,16 +353,21 @@
     }),
     setMatch(match) {
       online = true;
-      if (onlineMatch?.id !== match?.id) { keys.clear(); trail.length = 0; }
+      const changed = onlineMatch?.id !== match?.id;
+      if (changed) { keys.clear(); trail.length = 0; }
+      const from = Object.fromEntries(renderKeys.map(key => [key, game[key]]));
+      interpolation = match && !changed && !match.state.waiting && match.state.winner < 0
+        ? { from, to: { ...match.state }, started: animationTime } : null;
       onlineMatch = match;
       if (match) game = { ...match.state, paused: false };
       opponentSelect.disabled = pauseButton.disabled = document.querySelector("#new-game").disabled = true;
       document.querySelector("#online-controls").hidden = false;
       document.querySelector("#match-title").textContent = match ? `${match.players[0].name} vs ${match.players[1].name}` : "Tournament / match waiting room";
-      document.querySelector("#match-badge").textContent = match ? `LIVE · YOU: ${match.players[match.seat].name}` : "WAITING FOR YOUR MATCH";
+      document.querySelector("#match-badge").textContent = match
+        ? `${match.state.winner >= 0 ? "FINAL" : "LIVE"} · YOU: ${match.players[match.seat].name}` : "WAITING FOR YOUR MATCH";
     },
     practice() {
-      online = false; onlineMatch = null; keys.clear();
+      online = false; onlineMatch = null; interpolation = null; keys.clear();
       opponentSelect.disabled = pauseButton.disabled = document.querySelector("#new-game").disabled = false;
       document.querySelector("#online-controls").hidden = true;
       document.querySelector("#match-title").textContent = "Practice court";

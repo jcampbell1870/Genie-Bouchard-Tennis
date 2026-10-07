@@ -56,7 +56,7 @@ function createServer(options = {}) {
       players: [...room.members.values()].map(publicPlayer), capacity: room.capacity };
   }
   function roomView(room, player) {
-    const match = room.matches.find(m => m.players.some(p => p.id === player.id));
+    const match = room.matches.find(m => m.players.some(p => p.id === player.id)) || room.lastMatches.get(player.id);
     return {
       ...roomSummary(room),
       bracket: room.bracket.map(b => ({ round: b.round, index: b.index,
@@ -85,13 +85,13 @@ function createServer(options = {}) {
         if (match.state.winner < 0) continue;
         const winner = match.players[match.state.winner];
         match.bracket.winnerId = winner.id;
-        match.bracket.status = "finished";
+        match.bracket.status = "complete";
         room.matches.splice(room.matches.indexOf(match), 1);
         room.lastMatches.set(match.players[0].id, match);
         room.lastMatches.set(match.players[1].id, match);
         progress = true;
         if (room.mode === "duel" || match.bracket.round === 2) {
-          room.status = "finished";
+          room.status = "complete";
           room.champion = winner;
           room.finishedAt = now;
         } else {
@@ -103,27 +103,35 @@ function createServer(options = {}) {
       }
     }
   }
-  function start(room, now) {
-    room.status = "playing";
+  function fillBracket(room) {
     const entrants = [...room.members.values()];
     // Join order assigns seeds 1–8; standard pairing avoids meeting the top two before the final.
     const order = room.mode === "tournament" ? [0, 7, 3, 4, 1, 6, 2, 5] : [0, 1];
     const rounds = room.mode === "tournament" ? [4, 2, 1] : [1];
-    rounds.forEach((count, round) => {
-      for (let index = 0; index < count; index++) {
-        const bracket = { round, index, players: round === 0
-          ? [entrants[order[index * 2]], entrants[order[index * 2 + 1]]] : [null, null],
-          winnerId: null, status: "waiting" };
-        room.bracket.push(bracket);
-        if (round === 0) createMatch(room, bracket, now);
-      }
-    });
-    for (const player of entrants) player.heartbeat = now;
+    if (!room.bracket.length) {
+      rounds.forEach((count, round) => {
+        for (let index = 0; index < count; index++)
+          room.bracket.push({ round, index, players: [null, null], winnerId: null, status: "waiting" });
+      });
+    }
+    for (const bracket of room.bracket) {
+      if (bracket.round === 0)
+        bracket.players = [entrants[order[bracket.index * 2]] || null, entrants[order[bracket.index * 2 + 1]] || null];
+    }
+  }
+  function start(room, now) {
+    room.status = "playing";
+    for (const bracket of room.bracket) if (bracket.round === 0) createMatch(room, bracket, now);
+    for (const player of room.members.values()) player.heartbeat = now;
   }
   function leave(room, player, now) {
     room.members.delete(player.id);
     player.roomId = null;
     if (room.status === "playing") advance(room, now);
+    if (room.status === "waiting") {
+      fillBracket(room);
+      room.updatedAt = now;
+    }
     if (room.members.size === 0) rooms.delete(room.id);
   }
   function join(room, player, now) {
@@ -134,6 +142,7 @@ function createServer(options = {}) {
     player.heartbeat = now;
     room.members.set(player.id, player);
     room.updatedAt = now;
+    fillBracket(room);
     if (room.members.size === room.capacity) start(room, now);
   }
   function tick() {
@@ -154,7 +163,7 @@ function createServer(options = {}) {
       }
     }
     for (const room of rooms.values()) {
-      if ((room.status === "finished" && now - room.finishedAt > config.roomRetentionMs) ||
+      if ((room.status === "complete" && now - room.finishedAt > config.roomRetentionMs) ||
           (room.status === "waiting" && now - room.updatedAt > config.waitingTimeoutMs)) {
         for (const player of room.members.values()) player.roomId = null;
         rooms.delete(room.id);
@@ -304,19 +313,12 @@ function createServer(options = {}) {
       member(room, player);
       if (req.method === "GET" && !action) {
         player.heartbeat = now;
-        const view = roomView(room, player);
-        // Preserve the completed result for eliminated players and the final winner.
-        if (!view.match && room.lastMatches.has(player.id)) {
-          const match = room.lastMatches.get(player.id);
-          view.match = { id: match.id, seat: match.players.findIndex(p => p.id === player.id),
-            players: match.players.map(publicPlayer), state: match.state };
-        }
-        return send(200, view);
+        return send(200, roomView(room, player));
       }
       if (req.method === "POST" && action === "leave") {
         await body(req, true);
         leave(room, player, now);
-        return send(200, { left: true });
+        return send(200, roomView(room, player));
       }
       if (req.method === "POST" && action === "input") {
         limit(player.rates, "input", config.inputRequestsPerSecond, 1000, now);
@@ -331,7 +333,7 @@ function createServer(options = {}) {
         match.inputs[seat] = { x: data.x, y: data.y, swing: data.swing };
         match.inputTimes[seat] = now;
         if (data.x !== 0 || data.y !== 0 || data.swing) match.actionTimes[seat] = now;
-        return send(200, { accepted: true });
+        return send(200, roomView(room, player));
       }
       throw fail(405, "Method not allowed");
     } catch (error) {

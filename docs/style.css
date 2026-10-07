@@ -70,7 +70,8 @@ footer { text-align: center; margin-top: 28px; }
 .lobby-heading, .court-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .lobby-heading h2, .court-heading h2 { margin: 0 0 8px; }
 .lobby-heading .eyebrow { margin: 0 0 8px; }
-.badge { border: 1px solid #526071; color: #e0c783; border-radius: 20px; padding: 7px 12px; font-size: .7rem; font-weight: 800; letter-spacing: .08em; white-space: nowrap; }
+.badge { border: 1px solid #526071; color: #e0c783; border-radius: 20px; padding: 7px 12px; font-size: .7rem; font-weight: 800; letter-spacing: .08em; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.lobby-heading h3, .court-heading h2 { overflow-wrap: anywhere; min-width: 0; }
 .badge.connected { color: #7be2ad; border-color: #36745b; }
 .lobby-note { font-size: .85rem; color: #9facba; line-height: 1.5; }
 .connect-form, .create-form, .lobby-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }

@@ -160,9 +160,12 @@ test("HTTP duel auto-starts, authoritative input is bounded, stale input stops a
     assert.ok(Object.hasOwn(current.match.state, key), key);
   assert.equal((await f.request(`/api/rooms/${room.id}/input`, { token: a.token, method: "POST",
     data: { x: 0, y: 0, swing: true, winner: 0 } })).status, 400);
-  assert.equal((await f.request(`/api/rooms/${room.id}/input`, { token: a.token, method: "POST",
-    data: { x: 0, y: 0, swing: true } })).status, 200);
-  await delay(25);
+  const inputResult = await f.request(`/api/rooms/${room.id}/input`, { token: a.token, method: "POST",
+    data: { x: 0, y: 0, swing: true } });
+  assert.equal(inputResult.status, 200);
+  assert.equal(inputResult.value.id, room.id);
+  assert.equal(inputResult.value.status, "playing");
+  await f.poll(room.id, a, r => r.match && !r.match.state.waiting);
   await f.request(`/api/rooms/${room.id}/input`, { token: a.token, method: "POST",
     data: { x: 1, y: 0, swing: false } });
   await delay(130);
@@ -171,10 +174,15 @@ test("HTTP duel auto-starts, authoritative input is bounded, stale input stops a
   const x = stopped.value.match.state.playerX;
   await delay(60);
   assert.equal((await f.request(`/api/rooms/${room.id}`, { token: a.token })).value.match.state.playerX, x);
-  assert.equal((await f.request(`/api/rooms/${room.id}/leave`, { token: b.token, method: "POST", data: {} })).status, 200);
-  const finished = await f.poll(room.id, a, r => r.status === "finished");
+  const leaveResult = await f.request(`/api/rooms/${room.id}/leave`, { token: b.token, method: "POST", data: {} });
+  assert.equal(leaveResult.status, 200);
+  assert.equal(leaveResult.value.id, room.id);
+  assert.equal(leaveResult.value.status, "complete");
+  const finished = await f.poll(room.id, a, r => r.status === "complete");
   assert.equal(finished.champion.id, a.playerId);
   assert.equal(finished.match.state.winner, 0);
+  assert.equal((await f.request(`/api/rooms/${room.id}/input`, { token: a.token, method: "POST",
+    data: { x: 0, y: 0, swing: true } })).status, 409);
   assert.equal((await f.request(`/api/rooms/${room.id}`, { token: b.token })).status, 403);
 });
 
@@ -189,6 +197,9 @@ test("exactly eight seeded entrants automatically advance all seven matches incl
   const players = [];
   for (let i = 1; i <= 9; i++) players.push(await f.session(`Seed ${i}`));
   const room = await f.room(players[0], "tournament");
+  assert.equal(room.bracket.length, 7);
+  assert.deepEqual([...new Set(room.bracket.map(match => match.round))], [0, 1, 2]);
+  assert.ok(room.bracket.every(match => match.status === "waiting"));
   for (let i = 1; i < 7; i++) {
     const joined = await f.join(room.id, players[i]);
     assert.equal(joined.value.status, "waiting");
@@ -203,12 +214,17 @@ test("exactly eight seeded entrants automatically advance all seven matches incl
   await f.request(`/api/rooms/${room.id}/leave`, { token: players[7].token, method: "POST", data: {} });
   const afterDisconnect = await f.request(`/api/rooms/${room.id}`, { token: players[0].token });
   assert.equal(afterDisconnect.value.bracket[0].winnerId, players[0].playerId);
+  assert.equal(afterDisconnect.value.match.state.winner, 0);
+  const completedQuarterfinalId = afterDisconnect.value.match.id;
+  let activeMatchTookPriority = false;
   let final;
   const deadline = Date.now() + 3500;
   do {
     for (const player of players.slice(0, 7)) {
       const view = await f.request(`/api/rooms/${room.id}`, { token: player.token });
-      if (view.value.status === "finished") { final = view.value; break; }
+      if (view.value.status === "complete") { final = view.value; break; }
+      if (player === players[0] && view.value.match.id !== completedQuarterfinalId &&
+          view.value.match.state.winner < 0) activeMatchTookPriority = true;
       if (view.value.match && view.value.match.state.winner < 0)
         await f.request(`/api/rooms/${room.id}/input`, { token: player.token, method: "POST",
           data: { x: 0, y: 0, swing: true } });
@@ -218,8 +234,16 @@ test("exactly eight seeded entrants automatically advance all seven matches incl
   } while (Date.now() < deadline);
   assert.ok(final, "Tournament completed");
   assert.equal(final.champion.id, players[0].playerId);
-  assert.equal(final.bracket.filter(b => b.status === "finished").length, 7);
+  assert.equal(final.bracket.filter(b => b.status === "complete").length, 7);
   assert.equal(final.bracket[6].winnerId, final.champion.id);
+  assert.equal(activeMatchTookPriority, true);
+  for (const player of [players[0], players[4]]) {
+    const completed = await f.request(`/api/rooms/${room.id}`, { token: player.token });
+    assert.equal(completed.value.match.state.winner, 0);
+    assert.deepEqual(completed.value.match.state.games, [6, 0]);
+    assert.equal((await f.request(`/api/rooms/${room.id}/input`, { token: player.token, method: "POST",
+      data: { x: 0, y: 0, swing: true } })).status, 409);
+  }
   const lobby = await f.request("/api/lobby", { token: players[8].token });
   assert.equal(lobby.value.playerId, players[8].playerId);
   assert.equal(lobby.value.rooms[0].capacity, 8);
@@ -232,7 +256,7 @@ test("room heartbeats, idle forfeits and waiting membership cleanup", async t =>
   const b = await f.session("Disconnected");
   const room = await f.room(a);
   await f.join(room.id, b);
-  const result = await f.poll(room.id, a, r => r.status === "finished");
+  const result = await f.poll(room.id, a, r => r.status === "complete");
   assert.equal(result.champion.id, a.playerId);
   assert.equal(result.players.length, 1);
   assert.match(result.match.state.message, /DISCONNECTED/);
@@ -245,7 +269,7 @@ test("room heartbeats, idle forfeits and waiting membership cleanup", async t =>
   const q = await idle.session("Q");
   const idleRoom = await idle.room(p);
   await idle.join(idleRoom.id, q);
-  const idleResult = await idle.poll(idleRoom.id, p, r => r.status === "finished");
+  const idleResult = await idle.poll(idleRoom.id, p, r => r.status === "complete");
   assert.match(idleResult.match.state.message, /IDLE FORFEIT/);
 });
 
@@ -267,7 +291,7 @@ test("a winner leaving before the next round cannot rejoin and forfeits the futu
   for (const player of [players[3], players[1], players[2]])
     await f.request(`/api/rooms/${room.id}/input`, { token: player.token, method: "POST",
       data: { x: 0, y: 0, swing: true } });
-  const advanced = await f.poll(room.id, players[3], r => r.bracket[4].status === "finished");
+  const advanced = await f.poll(room.id, players[3], r => r.bracket[4].status === "complete");
   assert.equal(advanced.bracket[4].winnerId, players[3].playerId);
   assert.equal(advanced.bracket[4].players[0].id, players[0].playerId);
 });

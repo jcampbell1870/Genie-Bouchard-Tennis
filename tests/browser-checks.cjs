@@ -107,6 +107,15 @@ async function lobby(options = {}) {
     room.match = { id: "match", seat: 0, players: [{ name: "Player One" }, { name: "Player Two" }], state: { ...snapshot(), winner: options.completed ? 0 : -1, games: [6, 2] } };
     if (options.completed) room.champion = { id: "player", name: "Player One" };
   }
+  if (options.tournament) {
+    room.mode = "tournament";
+    room.status = "complete";
+    room.bracket = [
+      { round: 0, players: [{ id: "player", name: "Player One" }, { id: "two", name: "Player Two" }], winnerId: "player", status: "complete" },
+      { round: 2, players: [{ id: "player", name: "Player One" }, { id: "three", name: "Player Three" }], winnerId: "player", status: "complete" }
+    ];
+    room.champion = { id: "player", name: "Player One" };
+  }
   const context = {
     ...ui.context, URL, AbortSignal,
     location: options.location || { protocol: "http:", hostname: "localhost", origin: "http://localhost:8080" },
@@ -179,9 +188,23 @@ test("Completed matches display the champion and final score without posting fur
   await ui.tick();
   assert.equal(ui.calls.some(call => call.url.endsWith("/input")), false);
   assert.equal(ui.$("#room-status").textContent, "Player One is the champion!");
+  assert.equal(ui.$("#championship-trophy").hidden, true);
   assert.match(ui.$("#match-badge").textContent, /^FINAL/);
   ui.frame(100);
   assert.ok(ui.draw.some(text => text.includes("PLAYER ONE  6")));
+});
+
+test("Completed tournaments present the champion with a trophy", async () => {
+  const ui = await lobby({ tournament: true });
+  await ui.submit("#connect-form");
+  ui.$("#room-name").value = "Club Championship"; ui.$("#room-mode").value = "tournament";
+  await ui.submit("#create-form");
+  const trophy = ui.$("#championship-trophy");
+  assert.equal(trophy.hidden, false);
+  assert.equal(trophy.children[0].textContent, "🏆");
+  assert.equal(trophy.children[1].children[0].textContent, "Tournament champion");
+  assert.equal(trophy.children[1].children[1].textContent, "Player One");
+  assert.match(ui.$("#bracket").children[1].children[1].children[0].className, /winner/);
 });
 
 test("Rapid taps preserve release/press ordering while a swing request is in flight", async () => {

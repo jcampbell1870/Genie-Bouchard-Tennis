@@ -108,6 +108,25 @@
     const markup = JSON.stringify([room.players, room.bracket, room.champion]);
     if (markup === roomMarkup) return;
     roomMarkup = markup;
+    const trophy = $("#championship-trophy");
+    trophy.hidden = room.mode !== "tournament" || !room.champion;
+    trophy.replaceChildren();
+    if (!trophy.hidden) {
+      const icon = document.createElement("span");
+      icon.className = "championship-trophy-icon";
+      icon.textContent = "🏆";
+      icon.setAttribute("aria-hidden", "true");
+      const presentation = document.createElement("div");
+      const heading = document.createElement("span");
+      heading.className = "championship-trophy-heading";
+      heading.textContent = "Tournament champion";
+      const name = document.createElement("strong");
+      name.textContent = room.champion.name;
+      presentation.append(heading);
+      presentation.append(name);
+      trophy.append(icon);
+      trophy.append(presentation);
+    }
     $("#roster").replaceChildren();
     for (let i = 0; i < room.capacity; i++) {
       const player = room.players[i];

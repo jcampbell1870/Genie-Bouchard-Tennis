@@ -105,6 +105,10 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .bracket-match p { margin: 4px 0; overflow-wrap: anywhere; }
 .bracket-match .winner { color: #7be2ad; font-weight: 700; }
 .bracket-match small { color: #9facba; }
+.championship-trophy { display: flex; align-items: center; gap: 14px; margin: 20px 0; padding: 16px 20px; border: 1px solid #d4b264; border-radius: 8px; background: linear-gradient(110deg, #3c321e, #1c2733 72%); box-shadow: inset 0 0 24px #d4b26418; }
+.championship-trophy-icon { font-size: 2.5rem; line-height: 1; }
+.championship-trophy-heading { display: block; color: #e0c783; text-transform: uppercase; letter-spacing: .1em; font-size: .72rem; font-weight: 800; }
+.championship-trophy strong { display: block; margin-top: 4px; font-size: 1.2rem; overflow-wrap: anywhere; }
 .court-heading { margin-bottom: 12px; }
 .touch-controls { display: flex; justify-content: space-between; gap: 16px; margin-top: 14px; }
 .touch-controls button { touch-action: none; user-select: none; min-width: 48px; min-height: 48px; background: #28394e; color: #fff; }

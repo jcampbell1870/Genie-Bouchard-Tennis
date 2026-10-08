@@ -32,7 +32,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force docs/downloads, artifacts/chromebook | Out-Null
           Compress-Archive -Path artifacts/windows/* -DestinationPath docs/downloads/GenieBouchardTennis-Windows-x64.zip -Force
-          Copy-Item docs/index.html, docs/style.css, docs/game.js, docs/manifest.webmanifest, docs/service-worker.js artifacts/chromebook/
+          Copy-Item docs/index.html, docs/style.css, docs/game.js, docs/lobby.js, docs/manifest.webmanifest, docs/service-worker.js artifacts/chromebook/
           Compress-Archive -Path artifacts/chromebook/* -DestinationPath docs/downloads/GenieBouchardTennis-Chromebook.zip -Force
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

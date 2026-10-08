@@ -13,10 +13,36 @@
   const genie = { speed: 155, reach: 27, shot: 210 };
   const court = { left: 45, right: 435, top: 72, bottom: 310, net: 191 };
   const keys = new Set();
+  const swingEdges = [];
+  function changeKey(key, pressed) {
+    const wasSwinging = keys.has(" ");
+    if (pressed) keys.add(key); else keys.delete(key);
+    if (key === " " && keys.has(" ") !== wasSwinging) {
+      swingEdges.push(pressed);
+      if (swingEdges.length > 16) swingEdges.shift();
+    }
+  }
+  function clearInput() { changeKey(" ", false); keys.clear(); }
   let game;
   let previous = performance.now();
+  let online = false;
+  let onlineMatch = null;
+  let animationTime = 0;
+  let swingUntil = 0;
+  let lastPositions = [315, 300, 165, 82];
+  let motion = [false, false];
+  const motionUntil = [0, 0];
+  const renderKeys = ["playerX", "playerY", "opponentX", "opponentY", "ballX", "ballY"];
+  let interpolation = null;
+  const trail = [];
+  const surfaces = {
+    hard: { surround: "#365868", base: "#247ca0", stripe: "#287f9f" },
+    grass: { surround: "#52775b", base: "#31845a", stripe: "#398d62" },
+    clay: { surround: "#74614c", base: "#ba6844", stripe: "#c2714c" }
+  };
 
   function newGame() {
+    if (online) return;
     game = {
       points: [0, 0], games: [0, 0], winner: -1,
       playerX: 315, playerY: 300, opponentX: 165, opponentY: 82,
@@ -26,6 +52,7 @@
       message: "SPACE TO SERVE"
     };
     pauseButton.textContent = "Pause";
+    trail.length = 0;
     servePositions();
   }
 
@@ -109,6 +136,7 @@
   }
 
   function update(seconds) {
+    if (online) return;
     if (game.paused || game.winner >= 0) return;
     seconds = Math.min(seconds, 0.05);
     const moveX = Number(keys.has("ArrowRight") || keys.has("d")) - Number(keys.has("ArrowLeft") || keys.has("a"));
@@ -162,71 +190,202 @@
         game.ballX < court.left - 50 || game.ballX > court.right + 50)
       point(game.lastHitter, "POINT");
     if (newSwing) game.cooldown = 0.18;
+    if (newSwing) swingUntil = animationTime + 0.2;
   }
 
-  function sprite(x, y, isGenie) {
+  function sprite(x, y, isGenie, moving, selected) {
     x = Math.round(x); y = Math.round(y);
-    ctx.fillStyle = "#263b43"; ctx.fillRect(x - 8, y + 4, 16, 4);
-    ctx.fillStyle = isGenie ? "#d6a330" : "#80502f"; ctx.fillRect(x - 4, y - 21, 9, 7);
-    if (isGenie) ctx.fillRect(x - 8, y - 18, 4, 10);
-    ctx.fillStyle = "#f1d2b5"; ctx.fillRect(x - 3, y - 17, 7, 7);
-    ctx.fillStyle = isGenie ? "#f6f3df" : "#ef7668"; ctx.fillRect(x - 6, y - 10, 12, 12);
-    ctx.fillStyle = "#f1d2b5"; ctx.fillRect(x + 6, y - 8, 8, 3);
-    ctx.fillStyle = "#fff"; ctx.fillRect(x - 6, y + 2, 4, 6); ctx.fillRect(x + 3, y + 2, 4, 6);
-    ctx.fillStyle = "#183b86"; ctx.fillRect(x - 6, y + 7, 5, 3); ctx.fillRect(x + 3, y + 7, 5, 3);
-    ctx.strokeStyle = "#fff"; ctx.strokeRect(x + 14, y - 16, 9, 12);
-    ctx.beginPath(); ctx.moveTo(x + 15, y - 3); ctx.lineTo(x + 11, y); ctx.stroke();
+    const stride = moving ? Math.round(Math.sin(animationTime * 18) * 3) : 0;
+    const swinging = selected && animationTime < swingUntil;
+    ctx.save();
+    ctx.translate(x, y);
+    if (selected) {
+      ctx.strokeStyle = "#ffe092"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(0, 5, 13, 4, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.fillStyle = "#122b3a70";
+    ctx.beginPath(); ctx.ellipse(1, 5, 11, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = isGenie ? "#f2ceac" : "#b87c58";
+    ctx.fillRect(-6, -1, 4, 7 + stride); ctx.fillRect(3, -1, 4, 7 - stride);
+    ctx.fillStyle = "#faf7ea";
+    ctx.fillRect(-6, 4 + stride, 4, 4); ctx.fillRect(3, 4 - stride, 4, 4);
+    ctx.fillStyle = "#1c304e";
+    ctx.fillRect(-7, 8 + stride, 6, 3); ctx.fillRect(3, 8 - stride, 6, 3);
+    ctx.fillStyle = isGenie ? "#f5f3df" : "#e56762";
+    ctx.fillRect(-7, -17, 14, 14);
+    ctx.fillStyle = isGenie ? "#56a4bf" : "#213d63";
+    ctx.fillRect(-7, -5, 14, 5);
+    ctx.fillStyle = isGenie ? "#c7e6eb" : "#f7af8b";
+    ctx.fillRect(-6, -16, 3, 9);
+    ctx.fillStyle = isGenie ? "#f2ceac" : "#b87c58";
+    ctx.fillRect(-10, -14, 3, 10);
+    ctx.fillRect(7, -14, swinging ? 12 : 6, 3);
+    ctx.fillRect(-4, -25, 8, 8);
+    ctx.fillStyle = isGenie ? "#c99432" : "#402d28";
+    ctx.fillRect(-5, -28, 10, 5);
+    if (isGenie) ctx.fillRect(-8, -25, 4, 10);
+    if (!isGenie) ctx.fillRect(-5, -25, 10, 5);
+    ctx.fillStyle = "#fff"; ctx.fillRect(-5, -24, 10, 2);
+    if (isGenie) { ctx.fillStyle = "#384354"; ctx.fillRect(-3, -22, 1, 1); ctx.fillRect(2, -22, 1, 1); }
+    ctx.save(); ctx.translate(swinging ? 19 : 12, -12); ctx.rotate(swinging ? 1.1 : -0.35);
+    ctx.fillStyle = "#dedbd0"; ctx.fillRect(-1, -4, 2, 10);
+    ctx.strokeStyle = "#edf5f7"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.ellipse(0, -10, 5, 7, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = "#d7e7ee88"; ctx.lineWidth = 0.5;
+    for (let i = -3; i <= 3; i += 3) {
+      ctx.beginPath(); ctx.moveTo(i, -15); ctx.lineTo(i, -5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-4, -10 + i); ctx.lineTo(4, -10 + i); ctx.stroke();
+    }
+    ctx.restore(); ctx.restore();
   }
 
   function draw() {
-    ctx.fillStyle = "#0c1d2d"; ctx.fillRect(0, 0, 480, 360);
-    ctx.fillStyle = "#f2dc7d"; ctx.font = "bold 13px monospace"; ctx.fillText("GENIE BOUCHARD TENNIS", 144, 20);
+    ctx.fillStyle = "#101c2c"; ctx.fillRect(0, 0, 480, 360);
+    ctx.fillStyle = "#26364b"; ctx.fillRect(12, 5, 456, 47);
+    ctx.fillStyle = "#f2dc7d"; ctx.font = "bold 13px monospace"; ctx.fillText("CENTRE COURT", 185, 22);
     ctx.fillStyle = "#fff"; ctx.font = "bold 8px monospace";
-    ctx.fillText(`GENIE  ${game.games[0]}  ${pointLabel(0)}`, 45, 45);
-    ctx.fillText(`${profiles[opponentSelect.selectedIndex].name.toUpperCase()}  ${game.games[1]}  ${pointLabel(1)}`, 250, 45);
-    ctx.fillStyle = "#6e8f72"; ctx.fillRect(25, 55, 430, 272);
-    ctx.fillStyle = "#32845b"; ctx.fillRect(court.left, court.top, court.right - court.left, court.bottom - court.top);
+    const names = onlineMatch ? onlineMatch.players.map(p => p.name.toUpperCase().slice(0, 18)) : ["GENIE", profiles[opponentSelect.selectedIndex].name.toUpperCase()];
+    ctx.fillText(`${names[0]}  ${game.games[0]}  ${pointLabel(0)}`, 24, 43);
+    ctx.fillText(`${names[1]}  ${game.games[1]}  ${pointLabel(1)}`, 253, 43);
+    const surface = surfaces[document.querySelector("#surface").value];
+    ctx.fillStyle = surface.surround; ctx.fillRect(25, 55, 430, 272);
+    for (let row = 0; row < 12; row++) {
+      for (const x of [5, 462]) {
+        ctx.fillStyle = row % 3 === 0 ? "#daa35b" : row % 3 === 1 ? "#bac9da" : "#b46b70";
+        ctx.fillRect(x, 75 + row * 20, 10, 8);
+        ctx.fillStyle = "#31475f"; ctx.fillRect(x, 83 + row * 20, 10, 5);
+      }
+    }
+    ctx.fillStyle = surface.base; ctx.fillRect(court.left, court.top, court.right - court.left, court.bottom - court.top);
+    ctx.fillStyle = surface.stripe;
+    for (let y = court.top; y < court.bottom; y += 40) ctx.fillRect(court.left, y, court.right - court.left, 20);
     ctx.strokeStyle = "#f6f3df"; ctx.lineWidth = 2; ctx.strokeRect(court.left, court.top, court.right - court.left, court.bottom - court.top);
     ctx.strokeRect(65, court.top, 350, court.bottom - court.top);
     ctx.strokeRect(65, 132, 350, 118);
     ctx.beginPath(); ctx.moveTo(240, 132); ctx.lineTo(240, 250); ctx.stroke();
-    ctx.fillStyle = "#f6f3df"; ctx.fillRect(30, court.net - 2, 420, 4);
-    for (let x = 30; x < 450; x += 8) ctx.fillRect(x, court.net + 2, 2, 7);
-    sprite(game.opponentX, game.opponentY, false);
-    sprite(game.playerX, game.playerY, true);
+    sprite(game.opponentX, game.opponentY, false, motion[1], online ? onlineMatch?.seat === 1 : false);
+    ctx.fillStyle = "#10273460"; ctx.fillRect(30, court.net, 420, 10);
+    ctx.strokeStyle = "#c8d9d880"; ctx.lineWidth = 0.5;
+    for (let x = 30; x < 450; x += 6) { ctx.beginPath(); ctx.moveTo(x, court.net); ctx.lineTo(x, court.net + 9); ctx.stroke(); }
+    for (let y = court.net; y < court.net + 10; y += 3) { ctx.beginPath(); ctx.moveTo(30, y); ctx.lineTo(450, y); ctx.stroke(); }
+    ctx.fillStyle = "#f6f3df"; ctx.fillRect(30, court.net - 2, 420, 2);
+    ctx.fillStyle = "#24374a"; ctx.fillRect(28, court.net - 4, 3, 17); ctx.fillRect(449, court.net - 4, 3, 17);
+    sprite(game.playerX, game.playerY, true, motion[0], online ? onlineMatch?.seat === 0 : true);
+    trail.forEach((p, i) => {
+      ctx.fillStyle = `rgba(255,237,66,${i / trail.length * 0.3})`;
+      ctx.fillRect(p.x - 1, p.y - 1, 3, 3);
+    });
     ctx.fillStyle = "#536c36"; ctx.fillRect(game.ballX - 2, game.ballY + 4, 6, 2);
-    ctx.fillStyle = "#ffed42"; ctx.fillRect(game.ballX - 2, game.ballY - 2, 5, 5);
-    ctx.fillStyle = "#ffed42"; ctx.fillText(game.paused ? "PAUSED · P TO RESUME" : game.message, 45, 66);
+    ctx.fillStyle = "#ffed42"; ctx.beginPath(); ctx.arc(game.ballX, game.ballY - 2, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fffbb5"; ctx.fillRect(game.ballX - 1, game.ballY - 4, 2, 1);
+    ctx.fillStyle = "#ffed42"; ctx.fillText(game.paused ? "PAUSED · P TO RESUME" : game.message.slice(0, 70), 30, 66);
     ctx.fillStyle = "#fff"; ctx.fillText("ARROWS/WASD MOVE · SPACE SERVE/HIT · LEFT/RIGHT AIM", 45, 344);
-    ctx.fillStyle = "#f2dc7d"; ctx.fillText("CAN · EUGENIE BOUCHARD · PLAY A SET", 45, 357);
+    ctx.fillStyle = "#f2dc7d"; ctx.fillText(online ? "LIVE MATCH · EQUAL STATS · SERVER-VERIFIED SCORE" : "CAN · EUGENIE BOUCHARD · ARCADE TOUR", 45, 357);
+    if (online && !onlineMatch) {
+      ctx.fillStyle = "#101c2cdd"; ctx.fillRect(90, 150, 300, 70);
+      ctx.fillStyle = "#f2dc7d"; ctx.font = "bold 13px monospace";
+      ctx.fillText("CLUBHOUSE · WAITING", 160, 180);
+      ctx.font = "8px monospace"; ctx.fillText("Your roster and bracket are in the lobby above.", 110, 201);
+    }
   }
 
   function frame(now) {
+    animationTime = now / 1000;
     update((now - previous) / 1000);
+    if (online && interpolation) {
+      const fraction = Math.min(1, (animationTime - interpolation.started) / 0.1);
+      for (const key of renderKeys)
+        game[key] = interpolation.from[key] + (interpolation.to[key] - interpolation.from[key]) * fraction;
+    }
+    const positions = [game.playerX, game.playerY, game.opponentX, game.opponentY];
+    for (let seat = 0; seat < 2; seat++) {
+      if (Math.hypot(positions[seat * 2] - lastPositions[seat * 2], positions[seat * 2 + 1] - lastPositions[seat * 2 + 1]) > 0.1)
+        motionUntil[seat] = animationTime + 0.12;
+    }
+    motion = motionUntil.map(until => until > animationTime);
+    lastPositions = positions;
+    if (!game.waiting && !game.paused && (!online || onlineMatch)) {
+      trail.push({ x: game.ballX, y: game.ballY });
+      if (trail.length > 6) trail.shift();
+    } else trail.length = 0;
     previous = now;
     draw();
     requestAnimationFrame(frame);
   }
 
   window.addEventListener("keydown", event => {
+    if (event.target.closest("input, select, button, textarea")) return;
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
     if ([" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(key)) event.preventDefault();
-    if ((key === "p" || key === "n") && !event.repeat) {
+    if (!online && (key === "p" || key === "n") && !event.repeat) {
       if (key === "p") {
         game.paused = !game.paused;
         pauseButton.textContent = game.paused ? "Resume" : "Pause";
       } else newGame();
     }
-    keys.add(key);
+    changeKey(key, true);
+    if (key === " " && !event.repeat) swingUntil = animationTime + 0.2;
   });
-  window.addEventListener("keyup", event => keys.delete(event.key.length === 1 ? event.key.toLowerCase() : event.key));
-  window.addEventListener("blur", () => keys.clear());
-  document.querySelector("#new-game").addEventListener("click", newGame);
+  window.addEventListener("keyup", event => changeKey(event.key.length === 1 ? event.key.toLowerCase() : event.key, false));
+  window.addEventListener("blur", () => {
+    clearInput();
+    if (!online) { game.paused = true; pauseButton.textContent = "Resume"; }
+  });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) clearInput(); });
+  document.querySelector("#new-game").addEventListener("click", () => { newGame(); canvas.focus(); });
   pauseButton.addEventListener("click", () => {
+    if (online) return;
     game.paused = !game.paused;
     pauseButton.textContent = game.paused ? "Resume" : "Pause";
+    canvas.focus();
   });
   opponentSelect.addEventListener("change", newGame);
+  document.querySelector("#fullscreen").addEventListener("click", async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.querySelector(".game").requestFullscreen();
+    } catch { /* Full screen is optional on unsupported browsers. */ }
+  });
+  document.querySelectorAll("[data-key]").forEach(button => {
+    button.addEventListener("pointerdown", event => {
+      event.preventDefault(); button.setPointerCapture(event.pointerId);
+      changeKey(button.dataset.key, true);
+      if (button.dataset.key === " ") swingUntil = animationTime + 0.2;
+    });
+    for (const event of ["pointerup", "pointercancel", "lostpointercapture"])
+      button.addEventListener(event, () => changeKey(button.dataset.key, false));
+  });
+  window.TennisClient = {
+    takeSwingEdges: () => swingEdges.splice(0),
+    input: () => ({
+      x: Number(keys.has("ArrowRight") || keys.has("d")) - Number(keys.has("ArrowLeft") || keys.has("a")),
+      y: Number(keys.has("ArrowDown") || keys.has("s")) - Number(keys.has("ArrowUp") || keys.has("w")),
+      swing: keys.has(" ")
+    }),
+    setMatch(match) {
+      online = true;
+      const changed = onlineMatch?.id !== match?.id;
+      if (changed) { clearInput(); swingEdges.length = 0; trail.length = 0; }
+      const from = Object.fromEntries(renderKeys.map(key => [key, game[key]]));
+      interpolation = match && !changed && !match.state.waiting && match.state.winner < 0
+        ? { from, to: { ...match.state }, started: animationTime } : null;
+      onlineMatch = match;
+      if (match) game = { ...match.state, paused: false };
+      opponentSelect.disabled = pauseButton.disabled = document.querySelector("#new-game").disabled = true;
+      document.querySelector("#online-controls").hidden = false;
+      document.querySelector("#match-title").textContent = match ? `${match.players[0].name} vs ${match.players[1].name}` : "Tournament / match waiting room";
+      document.querySelector("#match-badge").textContent = match
+        ? `${match.state.winner >= 0 ? "FINAL" : "LIVE"} · YOU: ${match.players[match.seat].name}` : "WAITING FOR YOUR MATCH";
+    },
+    practice() {
+      online = false; onlineMatch = null; interpolation = null; clearInput(); swingEdges.length = 0;
+      opponentSelect.disabled = pauseButton.disabled = document.querySelector("#new-game").disabled = false;
+      document.querySelector("#online-controls").hidden = true;
+      document.querySelector("#match-title").textContent = "Practice court";
+      document.querySelector("#match-badge").textContent = "SOLO · ONE SET";
+      newGame();
+    }
+  };
   newGame();
   requestAnimationFrame(frame);
 })();

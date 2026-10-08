@@ -1,14 +1,48 @@
 # Genie-Bouchard-Tennis
 
-An original 2D Windows arcade tennis game with a low-resolution court, pixel players, and keyboard controls inspired by early console sports games. Play as **Eugenie “Genie” Bouchard of Canada**, the strongest selectable character in this game's fictional balancing: she has more speed, reach, and shot power than all three computer opponents.
+An original 2D arcade tennis game for Windows and browsers, with animated human tennis players, tennis kits, strung rackets, stadium seating, and a classic console-inspired court. Play solo as **Eugenie “Genie” Bouchard of Canada**, the strongest character in this game's fictional offline balancing, or compete online with equal player stats.
 
 No Nintendo code, sprites, music, logos, or other game assets are used. This is an unofficial fan project, not an endorsement by Eugenie Bouchard or Nintendo. Obtain any necessary name/likeness permissions before commercial distribution.
 
 ## Downloads and Chromebook
 
-The project website is [Genie Bouchard Tennis](https://jcampbell1870.github.io/Genie-Bouchard-Tennis/). GitHub Actions builds the self-contained Windows x64 ZIP and the offline Chromebook/browser ZIP, then publishes both with the site. The Chromebook build is a browser edition: extract its ZIP and open `index.html` in Chrome, or install the website as a Chrome app after opening it online. The browser edition supports keyboard play but does not include the desktop wallet/reward integration.
+The project website is [Genie Bouchard Tennis](https://jcampbell1870.github.io/Genie-Bouchard-Tennis/). GitHub Actions builds the self-contained Windows x64 ZIP and the offline Chromebook/browser ZIP, then publishes both with the site. The Chromebook build is a browser edition: extract its ZIP and open `index.html` in Chrome, or install the website as a Chrome app after opening it online. The browser edition supports keyboard and touch play, selectable hard/grass/clay court visuals, and full-screen play, but does not include the desktop wallet/reward integration. Court surfaces are cosmetic and do not alter physics.
 
 The Pages workflow runs on pushes to `main` and can also be started manually. GitHub Pages must be enabled with GitHub Actions as the deployment source for the site to go live.
+
+## Online clubhouse
+
+The browser has an original dark-and-gold, poker-lobby-inspired clubhouse: room filters, live seat counts, player rosters, and a quarterfinal/semifinal/final bracket. No GGPoker branding, assets, gambling, entry fees, or cash prizes are included.
+
+- **1 vs 1:** create a heads-up room; the second player joining starts the match.
+- **8-player tournaments:** create a knockout event; exactly eight entrants start four simultaneous quarterfinals. Winners advance automatically to two semifinals and one final.
+- Every match is one ordinary tennis set with deuce/advantage and a 6–6 tie-break. Online players have identical speed, reach, and power.
+- Enter a player name, connect to the same server as your friends, and join or create a room. You control the highlighted player, either at the bottom or top; movement follows screen directions for both seats. Release Space between swings.
+- Online matches cannot pause or restart. Leaving a live match forfeits it. Closing the page or losing the connection eventually forfeits the match after the server heartbeat timeout. Keep the tournament page open while waiting for subsequent rounds.
+
+### Run the multiplayer server
+
+Online play is real server-authoritative multiplayer, not a simulated lobby. **GitHub Pages cannot run the server**: a separate Node.js host is required. Offline practice continues to work without it.
+
+Install Node.js 22 or newer and run from the repository root:
+
+```sh
+node server/server.cjs
+```
+
+Open `http://localhost:8080` in two browsers (or eight for a tournament). The server serves the browser game and its API together, so the connection URL is prefilled. Sessions are temporary, held only in browser memory; names are display names, not verified accounts. Do not enter personal information. Reloading creates a new session rather than resuming a previous match.
+
+For public play, deploy the server behind an HTTPS reverse proxy and configure its allowed browser origins to include your site. Players on the GitHub Pages site enter that deployed **HTTPS server URL** in the lobby. Opening the downloaded game directly from `file://` is intended for offline practice; use the hosted site for multiplayer.
+
+Set `ALLOWED_ORIGINS` to a comma-separated list of exact browser origins, without paths or trailing slashes. Include the server's public origin if you also serve the game there. For example:
+
+```sh
+ALLOWED_ORIGINS=https://jcampbell1870.github.io,https://tennis.example.com node server/server.cjs
+```
+
+The defaults allow `http://localhost:8080` and `http://localhost:8000` for local development. `PORT` defaults to `8080`; `HOST` defaults to `0.0.0.0` (all network interfaces). For local-only use, set `HOST=127.0.0.1`. Disconnected entrants forfeit after 30 seconds without room polling; inactive players forfeit after two minutes without movement or swings.
+
+The server owns physics, scoring, tournament advancement, and forfeits; clients send movement and swing inputs only. Rooms and sessions are in memory and disappear on restart. This is a single-process, free-play service, not a production ranked/reward backend. Use TLS, proxy-level rate limits, and operator monitoring before exposing it publicly. It does not authorize or issue A1870 rewards.
 
 ## Play on Windows
 
@@ -76,6 +110,7 @@ Console checks with no test-framework dependency cover scoring, serving, determi
 dotnet run --project tests/GameChecks/GameChecks.csproj -- --bridge
 dotnet build GenieBouchardTennis.sln -c Release
 node --test tests/wallet-checks.cjs
+node --test tests/online-checks.cjs tests/browser-checks.cjs
 ```
 
 `--bridge` also checks the running loopback wallet page and its origin/Host protections. Add `--wait` to leave that page running for browser inspection. The wallet checks use Node.js's built-in test runner with a mocked provider to verify rejection, pending, reverted, and successful receipt states. No real issuer or wallet is contacted by these checks.

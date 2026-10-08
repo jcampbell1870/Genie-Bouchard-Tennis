@@ -13,6 +13,16 @@
   const genie = { speed: 155, reach: 27, shot: 210 };
   const court = { left: 45, right: 435, top: 72, bottom: 310, net: 191 };
   const keys = new Set();
+  const swingEdges = [];
+  function changeKey(key, pressed) {
+    const wasSwinging = keys.has(" ");
+    if (pressed) keys.add(key); else keys.delete(key);
+    if (key === " " && keys.has(" ") !== wasSwinging) {
+      swingEdges.push(pressed);
+      if (swingEdges.length > 16) swingEdges.shift();
+    }
+  }
+  function clearInput() { changeKey(" ", false); keys.clear(); }
   let game;
   let previous = performance.now();
   let online = false;
@@ -313,15 +323,15 @@
         pauseButton.textContent = game.paused ? "Resume" : "Pause";
       } else newGame();
     }
-    keys.add(key);
+    changeKey(key, true);
     if (key === " " && !event.repeat) swingUntil = animationTime + 0.2;
   });
-  window.addEventListener("keyup", event => keys.delete(event.key.length === 1 ? event.key.toLowerCase() : event.key));
+  window.addEventListener("keyup", event => changeKey(event.key.length === 1 ? event.key.toLowerCase() : event.key, false));
   window.addEventListener("blur", () => {
-    keys.clear();
+    clearInput();
     if (!online) { game.paused = true; pauseButton.textContent = "Resume"; }
   });
-  document.addEventListener("visibilitychange", () => { if (document.hidden) keys.clear(); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) clearInput(); });
   document.querySelector("#new-game").addEventListener("click", () => { newGame(); canvas.focus(); });
   pauseButton.addEventListener("click", () => {
     if (online) return;
@@ -339,13 +349,14 @@
   document.querySelectorAll("[data-key]").forEach(button => {
     button.addEventListener("pointerdown", event => {
       event.preventDefault(); button.setPointerCapture(event.pointerId);
-      keys.add(button.dataset.key);
+      changeKey(button.dataset.key, true);
       if (button.dataset.key === " ") swingUntil = animationTime + 0.2;
     });
     for (const event of ["pointerup", "pointercancel", "lostpointercapture"])
-      button.addEventListener(event, () => keys.delete(button.dataset.key));
+      button.addEventListener(event, () => changeKey(button.dataset.key, false));
   });
   window.TennisClient = {
+    takeSwingEdges: () => swingEdges.splice(0),
     input: () => ({
       x: Number(keys.has("ArrowRight") || keys.has("d")) - Number(keys.has("ArrowLeft") || keys.has("a")),
       y: Number(keys.has("ArrowDown") || keys.has("s")) - Number(keys.has("ArrowUp") || keys.has("w")),
@@ -354,7 +365,7 @@
     setMatch(match) {
       online = true;
       const changed = onlineMatch?.id !== match?.id;
-      if (changed) { keys.clear(); trail.length = 0; }
+      if (changed) { clearInput(); swingEdges.length = 0; trail.length = 0; }
       const from = Object.fromEntries(renderKeys.map(key => [key, game[key]]));
       interpolation = match && !changed && !match.state.waiting && match.state.winner < 0
         ? { from, to: { ...match.state }, started: animationTime } : null;
@@ -367,7 +378,7 @@
         ? `${match.state.winner >= 0 ? "FINAL" : "LIVE"} · YOU: ${match.players[match.seat].name}` : "WAITING FOR YOUR MATCH";
     },
     practice() {
-      online = false; onlineMatch = null; interpolation = null; keys.clear();
+      online = false; onlineMatch = null; interpolation = null; clearInput(); swingEdges.length = 0;
       opponentSelect.disabled = pauseButton.disabled = document.querySelector("#new-game").disabled = false;
       document.querySelector("#online-controls").hidden = true;
       document.querySelector("#match-title").textContent = "Practice court";

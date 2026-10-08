@@ -10,12 +10,11 @@
   let busy = false;
   let roomMarkup = "";
   let inputPending = false;
-  let swingQueued = false;
-  let swingReleased = false;
-  let lastSwing = false;
+  const swingEdges = [];
+  let inputMatchId = null;
 
   const status = message => { $("#lobby-status").textContent = message; };
-  const initialUrl = /^https?:$/.test(location.protocol) && !location.hostname.endsWith("github.io")
+  const initialUrl = /^https?:$/.test(location.protocol) && !/(^|\.)github\.io$/i.test(location.hostname)
     ? location.origin : "";
   $("#server-url").value = initialUrl;
 
@@ -51,7 +50,7 @@
   function reset() {
     generation++;
     connection = null; roomId = null; currentMatch = null;
-    rooms = []; roomMarkup = ""; swingQueued = swingReleased = lastSwing = false;
+    rooms = []; roomMarkup = ""; swingEdges.length = 0; inputMatchId = null;
     $("#connect").hidden = false;
     $("#disconnect").hidden = true;
     $("#player-name").disabled = $("#server-url").disabled = false;
@@ -226,15 +225,20 @@
 
   setInterval(async () => {
     const input = window.TennisClient.input();
-    if (input.swing && !lastSwing) swingQueued = true;
-    if (!input.swing && lastSwing) swingReleased = true;
-    lastSwing = input.swing;
+    const edges = window.TennisClient.takeSwingEdges();
+    if (inputMatchId !== currentMatch?.id) {
+      swingEdges.length = 0;
+      inputMatchId = currentMatch?.id;
+    }
+    if (!currentMatch || currentMatch.state.winner >= 0) swingEdges.length = 0;
+    else {
+      swingEdges.push(...edges);
+      if (swingEdges.length > 16) swingEdges.splice(0, swingEdges.length - 16);
+    }
     if (!connection || !roomId || !currentMatch || currentMatch.state.winner >= 0 || inputPending || busy) return;
     const epoch = generation;
     inputPending = true;
-    const sendSwing = swingQueued || (input.swing && !swingReleased);
-    if (swingQueued) swingQueued = false;
-    else if (swingReleased) swingReleased = false;
+    const sendSwing = swingEdges.length ? swingEdges.shift() : input.swing;
     try {
       await request(`/api/rooms/${encodeURIComponent(roomId)}/input`, "POST", { ...input, swing: sendSwing });
     } catch (error) {

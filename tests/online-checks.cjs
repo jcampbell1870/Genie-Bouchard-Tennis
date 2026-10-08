@@ -344,6 +344,57 @@ test("chunked oversized bodies are rejected without retaining unlimited data", a
   assert.equal((await f.request("/health")).status, 200);
 });
 
+test("streamed room mutations revalidate deleted rooms and changed memberships", async t => {
+  const f = await fixture(t);
+  const a = await f.session("A");
+  const b = await f.session("B");
+  async function streamed(route, player, prefix) {
+    let req;
+    const result = new Promise((resolve, reject) => {
+      req = http.request(f.base + route, { method: "POST", headers: {
+        "Content-Type": "application/json", "Transfer-Encoding": "chunked",
+        Authorization: ["Bearer", player.token].join(" ")
+      } }, res => {
+        const chunks = [];
+        res.on("data", chunk => chunks.push(chunk));
+        res.on("end", () => resolve({ status: res.statusCode,
+          value: JSON.parse(Buffer.concat(chunks).toString("utf8")) }));
+        res.on("error", reject);
+      });
+      req.on("error", reject);
+    });
+    req.write(prefix);
+    await delay(30);
+    return { finish: suffix => { req.end(suffix); return result; } };
+  }
+
+  const deletedRoom = await f.room(a);
+  const pendingJoin = await streamed(`/api/rooms/${deletedRoom.id}/join`, b, '{"note":"');
+  await f.request(`/api/rooms/${deletedRoom.id}/leave`, { token: a.token, method: "POST", data: {} });
+  assert.equal((await pendingJoin.finish('late"}')).status, 404);
+  const recoveredRoom = await f.room(b);
+  assert.equal((await f.request(`/api/rooms/${recoveredRoom.id}`, { token: b.token })).status, 200);
+  await f.request(`/api/rooms/${recoveredRoom.id}/leave`, { token: b.token, method: "POST", data: {} });
+
+  const waitingRoom = await f.room(a, "tournament");
+  await f.join(waitingRoom.id, b);
+  const pendingLeave = await streamed(`/api/rooms/${waitingRoom.id}/leave`, b, '{"note":"');
+  await f.request(`/api/rooms/${waitingRoom.id}/leave`, { token: b.token, method: "POST", data: {} });
+  const nextRoom = await f.room(b);
+  assert.equal((await pendingLeave.finish('late"}')).status, 403);
+  assert.equal((await f.request(`/api/rooms/${nextRoom.id}`, { token: b.token })).status, 200);
+  await f.request(`/api/rooms/${nextRoom.id}/leave`, { token: b.token, method: "POST", data: {} });
+  await f.request(`/api/rooms/${waitingRoom.id}/leave`, { token: a.token, method: "POST", data: {} });
+
+  const liveRoom = await f.room(a);
+  await f.join(liveRoom.id, b);
+  const pendingInput = await streamed(`/api/rooms/${liveRoom.id}/input`, a, '{"x":');
+  await f.request(`/api/rooms/${liveRoom.id}/leave`, { token: a.token, method: "POST", data: {} });
+  const replacementRoom = await f.room(a);
+  assert.equal((await pendingInput.finish('0,"y":0,"swing":true}')).status, 403);
+  assert.equal((await f.request(`/api/rooms/${replacementRoom.id}`, { token: a.token })).status, 200);
+});
+
 test("input and session rate limits allow normal clients but reject flooding", async t => {
   const f = await fixture(t, { sessionRequestsPerMinute: 3, inputRequestsPerSecond: 25 });
   const a = await f.session("A");

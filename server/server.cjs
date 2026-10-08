@@ -153,9 +153,10 @@ function createServer(options = {}) {
     stepBudget -= steps / 60;
     for (const [address, entry] of addresses) if (now >= entry.until) addresses.delete(address);
     for (const [token, player] of sessions) {
-      if (player.roomId && now - player.heartbeat > config.heartbeatTimeoutMs) {
+      if (player.roomId) {
         const room = rooms.get(player.roomId);
-        if (room) leave(room, player, now);
+        if (!room) player.roomId = null;
+        else if (now - player.heartbeat > config.heartbeatTimeoutMs) leave(room, player, now);
       }
       if (now - player.lastSeen > config.sessionTimeoutMs) {
         if (player.roomId && rooms.has(player.roomId)) leave(rooms.get(player.roomId), player, now);
@@ -273,8 +274,9 @@ function createServer(options = {}) {
         if (sessions.size >= config.maxSessions) throw fail(503, "Session capacity reached");
         const data = await body(req);
         if (sessions.size >= config.maxSessions) throw fail(503, "Session capacity reached");
-        const player = { id: id(), name: text(data.name), roomId: null, heartbeat: now,
-          lastSeen: now, rates: new Map() };
+        const createdAt = Date.now();
+        const player = { id: id(), name: text(data.name), roomId: null, heartbeat: createdAt,
+          lastSeen: createdAt, rates: new Map() };
         const token = crypto.randomBytes(32).toString("base64url");
         sessions.set(token, player);
         return send(201, { token, playerId: player.id });
@@ -283,6 +285,10 @@ function createServer(options = {}) {
       const player = authorization.length === 2 && authorization[0].toLowerCase() === "bearer"
         ? sessions.get(authorization[1]) : null;
       if (!player) throw fail(401, "Valid bearer token required");
+      const revalidateSession = () => {
+        if (sessions.get(authorization[1]) !== player) throw fail(401, "Session expired");
+        player.lastSeen = Date.now();
+      };
       player.lastSeen = now;
       limit(player.rates, "all", config.requestsPerSecond, 1000, now);
       if (req.method === "GET" && pathname === "/api/lobby")
@@ -291,23 +297,26 @@ function createServer(options = {}) {
         if (player.roomId) throw fail(409, "Leave your current room first");
         if (rooms.size >= config.maxRooms) throw fail(503, "Room capacity reached");
         const data = await body(req);
+        revalidateSession();
         if (player.roomId) throw fail(409, "Leave your current room first");
         if (rooms.size >= config.maxRooms) throw fail(503, "Room capacity reached");
         if (data.mode !== "duel" && data.mode !== "tournament") throw fail(400, "Mode must be duel or tournament");
         const room = { id: id(), name: text(data.name, "Tennis room"), mode: data.mode,
           status: "waiting", capacity: data.mode === "duel" ? 2 : 8, members: new Map(),
-          bracket: [], matches: [], lastMatches: new Map(), champion: null, updatedAt: now };
+          bracket: [], matches: [], lastMatches: new Map(), champion: null, updatedAt: Date.now() };
         rooms.set(room.id, room);
-        join(room, player, now);
+        join(room, player, Date.now());
         return send(201, roomView(room, player));
       }
       const route = /^\/api\/rooms\/([^/]+)(?:\/(join|leave|input))?$/.exec(pathname);
       if (!route) throw fail(404, "Endpoint not found");
-      const room = findRoom(route[1]);
+      let room = findRoom(route[1]);
       const action = route[2];
       if (req.method === "POST" && action === "join") {
         await body(req, true);
-        join(room, player, now);
+        revalidateSession();
+        room = findRoom(route[1]);
+        join(room, player, Date.now());
         return send(200, roomView(room, player));
       }
       member(room, player);
@@ -317,12 +326,18 @@ function createServer(options = {}) {
       }
       if (req.method === "POST" && action === "leave") {
         await body(req, true);
-        leave(room, player, now);
+        revalidateSession();
+        room = findRoom(route[1]);
+        member(room, player);
+        leave(room, player, Date.now());
         return send(200, roomView(room, player));
       }
       if (req.method === "POST" && action === "input") {
         limit(player.rates, "input", config.inputRequestsPerSecond, 1000, now);
         const data = await body(req);
+        revalidateSession();
+        room = findRoom(route[1]);
+        member(room, player);
         if (!Number.isFinite(data.x) || data.x < -1 || data.x > 1 ||
             !Number.isFinite(data.y) || data.y < -1 || data.y > 1 || typeof data.swing !== "boolean" ||
             Object.keys(data).some(key => !["x", "y", "swing"].includes(key)))
@@ -331,8 +346,8 @@ function createServer(options = {}) {
         if (!match || match.state.winner >= 0) throw fail(409, "No active match");
         const seat = match.players.findIndex(p => p.id === player.id);
         match.inputs[seat] = { x: data.x, y: data.y, swing: data.swing };
-        match.inputTimes[seat] = now;
-        if (data.x !== 0 || data.y !== 0 || data.swing) match.actionTimes[seat] = now;
+        match.inputTimes[seat] = Date.now();
+        if (data.x !== 0 || data.y !== 0 || data.swing) match.actionTimes[seat] = match.inputTimes[seat];
         return send(200, roomView(room, player));
       }
       throw fail(405, "Method not allowed");

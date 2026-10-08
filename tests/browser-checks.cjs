@@ -63,6 +63,10 @@ test("Keyboard and touch controls release cleanly and do not consume text entry"
   ui.window.listeners.keydown(ui.key("w"));
   ui.window.listeners.blur();
   assert.equal(ui.window.TennisClient.input().y, 0);
+  ui.window.TennisClient.takeSwingEdges();
+  ui.window.listeners.keydown(ui.key(" "));
+  ui.window.listeners.keyup(ui.key(" "));
+  assert.deepEqual(Array.from(ui.window.TennisClient.takeSwingEdges()), [true, false]);
 });
 
 test("Live snapshots disable solo controls, preserve server scores, and restore practice", () => {
@@ -98,16 +102,17 @@ async function lobby(options = {}) {
     id: "court", name: "<img onerror=alert(1)>", mode: "duel", status: "waiting",
     players: [{ id: "player", name: "<script>name</script>" }], capacity: 2, bracket: [], match: null, champion: null
   };
-  if (options.completed) {
-    room.status = "complete";
-    room.match = { id: "match", seat: 0, players: [{ name: "Player One" }, { name: "Player Two" }], state: { ...snapshot(), winner: 0, games: [6, 2] } };
-    room.champion = { id: "player", name: "Player One" };
+  if (options.completed || options.live) {
+    room.status = options.completed ? "complete" : "playing";
+    room.match = { id: "match", seat: 0, players: [{ name: "Player One" }, { name: "Player Two" }], state: { ...snapshot(), winner: options.completed ? 0 : -1, games: [6, 2] } };
+    if (options.completed) room.champion = { id: "player", name: "Player One" };
   }
   const context = {
     ...ui.context, URL, AbortSignal,
-    location: { protocol: "http:", hostname: "localhost", origin: "http://localhost:8080" },
+    location: options.location || { protocol: "http:", hostname: "localhost", origin: "http://localhost:8080" },
     fetch: async (url, config) => {
       calls.push({ url, config });
+      if (url.endsWith("/input") && options.onInput) await options.onInput(config);
       let data = url.endsWith("/api/session") ? { token: "test-session", playerId: "player" }
         : url.endsWith("/api/lobby") ? { rooms: [room], playerId: "player" } : room;
       return { ok: !options.fail, status: options.fail ? 503 : 200, json: async () => options.fail ? { error: "Unavailable" } : data };
@@ -158,6 +163,13 @@ test("Unsafe server URLs and failed connections do not enter an online session",
   assert.equal(ui.$("#lobby-status").textContent, "Unavailable");
 });
 
+test("Only actual GitHub Pages hosts suppress the same-origin server default", async () => {
+  for (const hostname of ["github.io", "jcampbell1870.github.io", "notgithub.io"]) {
+    const ui = await lobby({ location: { protocol: "https:", hostname, origin: `https://${hostname}` } });
+    assert.equal(ui.$("#server-url").value, hostname === "notgithub.io" ? `https://${hostname}` : "");
+  }
+});
+
 test("Completed matches display the champion and final score without posting further inputs", async () => {
   const ui = await lobby({ completed: true });
   await ui.submit("#connect-form");
@@ -170,6 +182,26 @@ test("Completed matches display the champion and final score without posting fur
   assert.match(ui.$("#match-badge").textContent, /^FINAL/);
   ui.frame(100);
   assert.ok(ui.draw.some(text => text.includes("PLAYER ONE  6")));
+});
+
+test("Rapid taps preserve release/press ordering while a swing request is in flight", async () => {
+  let release;
+  let inputCount = 0;
+  const ui = await lobby({ live: true, onInput: () => ++inputCount === 1 ? new Promise(resolve => { release = resolve; }) : undefined });
+  await ui.submit("#connect-form");
+  ui.$("#room-name").value = "Court"; ui.$("#room-mode").value = "duel";
+  await ui.submit("#create-form");
+  ui.window.listeners.keydown(ui.key(" "));
+  const pending = ui.tick();
+  await ui.settle();
+  ui.window.listeners.keyup(ui.key(" "));
+  ui.window.listeners.keydown(ui.key(" "));
+  ui.window.listeners.keyup(ui.key(" "));
+  await ui.tick();
+  release(); await pending;
+  for (let i = 0; i < 3; i++) await ui.tick();
+  const inputs = ui.calls.filter(call => call.url.endsWith("/input")).map(call => JSON.parse(call.config.body).swing);
+  assert.deepEqual(inputs, [true, false, true, false]);
 });
 
 test("Service worker never caches live API responses or third-party requests", () => {
